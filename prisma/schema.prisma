@@ -1,0 +1,142 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Tenant {
+  id              String   @id @default(cuid())
+  name            String
+  subdomain       String   @unique
+  domain          String?  @unique
+  theme           Json?    // Configuraciones de UI/UX (colores, tipografías)
+  paymentSettings Json?    // { cashEnabled: boolean, transferEnabled: boolean, bankDetails: string }
+  shippingSettings Json?   // { flatRate: number, pickupEnabled: boolean, pickupAddress: string }
+  users           User[]
+  products        Product[]
+  orders          Order[]
+  categories      Category[]
+  coupons         Coupon[]
+  mpAccessToken   String?  // Token de MercadoPago Connect
+  mpUserId        String?
+  status          String   @default("ACTIVE") // ACTIVE, INACTIVE, TRIAL, SUSPENDED
+  plan            String   @default("FREE")   // FREE, PRO, ENTERPRISE
+  subscriptionId  String?  // ID de suscripción de MercadoPago
+  subscriptionExpires DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  role      String   @default("SELLER") // SUPERADMIN o SELLER
+  tenantId  String?
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  name        String
+  description String?
+  price       Float
+  stock       Int      @default(0)
+  images      String[]
+  variants    ProductVariant[]
+  orders      OrderLine[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  tenantId  String
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([tenantId, name])
+}
+
+model ProductVariant {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name      String   // Ej: "Talle 40 - Rojo" o "Color"
+  value     String   // Ej: "Rojo"
+  price     Float?   // Precio opcional si cambia por variante
+  stock     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Coupon {
+  id          String    @id @default(cuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  code        String
+  type        String    @default("PERCENTAGE") // PERCENTAGE or FIXED
+  value       Float     // 10 = 10% or $10
+  minAmount   Float?    // Monto mínimo de compra
+  maxUses     Int?      // Límite de usos totales
+  usedCount   Int       @default(0)
+  expiresAt   DateTime?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([tenantId, code])
+}
+
+model Order {
+  id              String   @id @default(cuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerEmail   String
+  customerName    String?
+  whatsapp        String?
+  customerAddress String?
+  customerZipCode String?
+  customerCity    String?
+  shippingCost    Float    @default(0)
+  total           Float
+  discountAmount  Float    @default(0)
+  couponCode      String?
+  status          String   @default("PENDING") // PENDING, PAID, SHIPPED, COMPLETED
+  paymentMethod   String   // CASH, TRANSFER, MERCADOPAGO
+  paymentProof    String?  // URL del comprobante
+  mpPreferenceId  String?
+  mpPaymentId     String?
+  lines           OrderLine[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model OrderLine {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantName String? // Nombre de la variante comprada
+  quantity  Int
+  price     Float
+}
+
